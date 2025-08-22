@@ -1,0 +1,368 @@
+---
+title: "tableau"
+author: "Sarthak Sunil Dhanke"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+library(babynames)
+library(tidyverse)
+library(readxl)
+```
+
+```{r}
+# diversity index
+diversity <- babynames |>
+    group_by(year, name) |> 
+    summarise(n = sum(n)) |> 
+    mutate(total = sum(n), p = n / total) |> 
+    summarise(diversity = -sum(p * log2(p)))
+diversity
+```
+
+
+```{r}
+diversity |> 
+    ggplot(aes(year, diversity)) +
+    geom_line(linewidth = 1) +
+    labs(title = "Diversity of Names (1880 - 2025)")
+```
+
+
+```{r}
+library(readxl)
+foreign_born <- read_excel(, skip = 8)
+foreign_born
+```
+
+```{r}
+raw_data <- read_excel("./data/table02.xlsx", sheet = "Table 2", col_names = FALSE)
+numbers_data <- raw_data[10:22, 1:10]
+colnames(numbers_data) <- c(
+    "Year",
+    "Total_Foreign_Born", 
+    "Region_Reported_Total",
+    "Europe",
+    "Asia", 
+    "Africa",
+    "Oceania",
+    "Latin_America",
+    "Northern_America",
+    "Region_Not_Reported"
+)
+numbers_data
+```
+
+
+```{r}
+# Remove asterisks from years and convert to numeric
+numbers_data$Year <- as.numeric(str_remove_all(numbers_data$Year, "\\*|\\s"))
+
+# Convert all numeric columns, handling NAs
+numeric_cols <- colnames(numbers_data)[-1]  # All except Year
+
+numbers_data <- numbers_data %>%
+mutate(across(all_of(numeric_cols), ~ as.numeric(.)))
+
+# Sort by year (ascending order)
+numbers_data <- numbers_data %>%
+arrange(Year) %>%
+filter(!is.na(Year))  # Remove any rows without valid years
+
+numbers_data
+```
+
+
+
+
+
+```{r}
+number_data <- numbers_data |> 
+  pivot_longer(cols = -c(Year, Total_Foreign_Born, Region_Reported_Total), names_to = "Region", values_to = "Population")
+number_data
+```
+
+```{r}
+write_csv(number_data, "./data/foreign_born_population.csv")
+```
+
+
+```{r}
+number_data |> 
+  select(Year, Total_Foreign_Born) |>
+  distinct(Year, Total_Foreign_Born) |> 
+  inner_join(diversity, join_by(Year == year)) |> 
+  write_csv("diversity_total_foreign_born.csv")
+  
+```
+
+
+
+```{r}
+top10 <- babynames |> 
+    group_by(year, sex) |> 
+    mutate(rank = rank(-n), total = sum(n)) |> 
+    filter(rank <= 10) |> 
+    summarize(top10_share = sum(n) / max(total), .groups = "drop") |> 
+    group_by(year) |> 
+    summarise(mean_share = mean(top10_share))
+top10
+```
+
+```{r}
+two_effect <- diversity |> 
+    inner_join(top10, join_by(year))
+two_effect
+```
+
+
+```{r}
+
+ggplot(two_effect, aes(x = year)) +
+  geom_line(aes(y = diversity, color = "Diversity (Shannon entropy)"), size = 1.2) +
+  geom_line(aes(y = mean_share * 10, color = "Consolidation (Top 10 share)"), size = 1.2, linetype = "dashed") +
+  scale_y_continuous(
+    name = "Diversity (Shannon entropy, bits)",
+    sec.axis = sec_axis(~./10, name = "Top 10 Share of Births (%)", labels = scales::percent)
+  ) +
+  scale_color_manual(values = c("Diversity (Shannon entropy)" = "#1F78B4",
+                                "Consolidation (Top 10 share)" = "#E66101")) +
+  labs(
+    title = "Yin and Yang of Baby Names",
+    subtitle = "Long-run diversification vs. short-run consolidation in U.S. baby names",
+    x = "Year",
+    color = "Metric",
+    caption = "Source: U.S. SSA; names <5 births/year excluded"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "top")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

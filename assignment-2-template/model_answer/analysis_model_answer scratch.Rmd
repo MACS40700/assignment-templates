@@ -1,0 +1,661 @@
+---
+title: "Assignment 2"
+author: "Your Name"
+date: "`r Sys.Date()`"
+output:
+  html_document: 
+    toc: true
+    toc_float: true
+    highlight: zenburn
+    df_print: tibble
+  md_document:
+    variant: gfm
+---
+
+# Introduction
+
+The data used for this assignment is from a listing of **Toyota Corolla** offered for resale in the year **2004**, possibly in the **Netherlands**. The total number of entries in this dataset is ***1436***. 
+
+Given that data is a subset of all cars in the Netherlands, it is expected that trends in this data are influenced by **Dutch policy**, therefore a discussion of such is of ***utmost importance*** so that we can narrow down the field of inquiry. Back then, ***tax rates were proportional to the weight of the vehicle***. So, weight and tax are expected to be **strongly correlated**. 
+
+Additionally, diesel cars being heavier than petrol, were liable to **increased taxation**. However, since diesel fuel was ***cheaper enough*** that long-distance drivers still often chose diesel over petrol, which contributed to the demand for diesel vehicles, translating to the **resale value** of diesel cars. 
+
+All in all, one can expect to see an **interplay** between Dutch policy that made diesel vehicles costly on one hand while the lower fuel cost made them more affordable. Both these ***opposing factors*** are expected to drive the resale prices of cars. 
+
+Though it must be noted that there will always be **outliers** that dominate any dataset. For example:
+
+• The **age** of a car  
+• The **number of kilometers driven**  
+
+These factors will eventually outweigh the fuel type.
+
+For this particular assignment we will focus on:
+
+• **Distribution of cars by fuel type** (categorical plot)  
+• **Verification of the relationship between taxes and weight** (continuous plot) which we expect to be ***positively correlated***  
+
+In the later part of the assignment other hypotheses will be explored to test the factors that drove the **resale value**.
+
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(ggExtra)
+library(ggridges)
+library(scales)
+library(ggpubr)
+library(scales)
+library(ggtext) 
+library(ggthemes)
+```
+
+
+```{r}
+# load the data
+dataPath = "./data/ToyotaCorolla.csv"
+corolla <- read_csv(dataPath) |> janitor::clean_names()
+head(corolla)
+```
+
+# Categorical Plots
+
+## 1. Simple count plot of cars by fuel type
+
+The fuel-type mix in the data shows ***significant imbalance***. Almost all the cars use **petrol** as fuel. **Diesel** is a distant second and **CNG** cars are rare. Apparently, Toyota offerings were mostly petrol or perhaps this may simply be an ***idiosyncrasy*** of the data, we shall perhaps never know. But the **bias** is worth noticing, since it means the rest of the plots will mostly reflect petrol cars unless we split or facet by fuel type. This context will be ***important*** while interpreting significant effects.
+
+
+
+```{r}
+corolla |> 
+  ggplot(aes(fuel_type)) +
+  geom_bar()
+```
+
+
+## 2. Pie chart as an alternative
+
+To emphasize the ***extreme imbalance*** a pie chart can be used. Pie charts are usually **decried** over bar plots because humans are incapable of visually interpreting angles in the pie over the height of the bar. But here they will serve the purpose of ***exaggerating the imbalance*** in the data, namely the **dominance of petrol cars**.
+
+
+```{r}
+# Calculate percentages and label positions
+fuel <- corolla |> 
+  count(fuel_type) |> 
+  mutate(
+    pct = n / sum(n),
+    label = paste0(fuel_type, "\n", round(pct * 100, 1), "%") # Create label with fuel type and percentage
+  ) |> 
+  arrange(desc(n)) |> 
+  mutate(ypos = cumsum(pct) - 0.5 * pct) # Calculate cumulative positions for label placement
+fuel
+```
+
+
+```{r}
+fuel |>  
+  ggplot(aes(x = "", y = pct, fill = fuel_type)) +
+  geom_bar(stat = "identity") +
+  coord_polar("y")
+```
+
+
+
+## 3. Enhanced donut chart with improved aesthetics
+
+The pie chart by itself is not **aesthetically pleasing**. Not only that, there are a few things such as the **grid lines** and the **background** that can be cleaned up. As an improvement a ***donut chart*** can be used instead. As a good practice the following enhancements have been added:
+
+• **Custom theme**  
+• **Color palette**  
+• **Annotations**  
+• **Title and subtitle**  
+
+```{r fig.height=4}
+# Hole size
+hsize <- 2
+
+ggplot(fuel, aes(x = hsize, y = pct, fill = fuel_type)) +
+  geom_col(color = "white") +
+  geom_text(aes(label = label, y = ypos), x = hsize + 1, size = 4) +
+  coord_polar(theta = "y") +
+  scale_fill_brewer(palette = "GnBu") +
+  xlim(c(0, hsize + 1)) +
+  theme_void() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold", size = 15),
+    plot.subtitle = element_text(size = 10, color = "grey30")
+  ) +
+  labs(
+    title = "Toyota Fuel Type Distribution",
+    subtitle = "Petrol dominates the market, with Diesel far behind and CNG almost absent"
+  )
+```
+
+
+## Bonus : The same using ggpubr library
+
+```{r}
+library(ggpubr)
+
+ 
+donut_plot <- ggdonutchart(fuel, "pct", label = "label", lab.font = c(4, "plain", "black"),
+      fill = "fuel_type", color = "white", palette = "GnBu")
+donut_plot
+```
+
+
+```{r fig.height=4}
+donut_plot +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold", size = 15),
+    plot.subtitle = element_text(size = 10, color = "grey30")
+  ) +
+  labs(
+    title = "Toyota Fuel Type Distribution",
+    subtitle = "Petrol dominates the market, with Diesel far behind and CNG almost absent\nn=1436"
+  )
+```
+
+
+# Continuous Variables
+
+## Trend between quarterly tax and weight
+
+### 1. Scatter plot
+
+The scatter plot reveals that ***tax increases as the weight goes up***, but the tax is not **proportional** to weight, rather there are ***tax slabs*** as we can see most of the points are clustered at **discrete values**. This suggests the next step to visualize this better: ***create tax buckets***.
+
+```{r}
+# relationship between weight and quarterly tax
+corolla |> 
+  ggplot(aes(quarterly_tax, weight)) +
+  geom_point()
+```
+
+
+## 2. Boxplot of Tax Band vs Weight of car
+
+
+```{r}
+(corolla_subset <- corolla |>
+  select(weight, quarterly_tax, fuel_type) |> # select the required columns
+  mutate(
+    tax_band = factor(case_when( # create tax bands 
+    quarterly_tax < 100 ~ "low",
+    between(quarterly_tax, 100, 200) ~ "medium",
+    quarterly_tax >= 200 ~ "high"), levels = c("low", "medium", "high"), ordered = TRUE),
+    weight_bin = factor(case_when(  # additionally create weight bins
+      weight < 1150 ~ "light",
+      weight >= 1150 ~ "heavy"),
+      levels = c("light", "heavy"), ordered = TRUE)
+    )
+  )
+```
+
+
+```{r}
+corolla_subset |> 
+  ggplot(aes(tax_band, weight)) +
+  geom_boxplot()
+```
+
+
+
+### 3. Refinement
+
+The previous plot can be improved by adding:
+
+• **Custom theme**  
+• **Color palette**  
+• **Annotations**  
+• **Title and subtitle**  
+
+Considering the ***imbalance in the data***, the **group size** has also been added to the plot so that viewers are ***cautious of interpreting the effects as significant*** without considering the group size.
+
+```{r, fig.height=4}
+corolla_subset |> 
+  ggplot(aes(tax_band, weight, fill = tax_band)) +
+  geom_boxplot(width = 0.5, linewidth = 0.3) +
+  scale_fill_brewer(palette = "GnBu") +
+  scale_x_discrete(labels = function(x){
+    counts <- table(corolla_subset$tax_band)
+    paste0(x, "\n(n=", counts[x], ")")
+  } ) +
+  labs(
+    title = "Weight Distribution by Tax Band",
+    subtitle = "Heavier vehicles pay more taxes. Though sample size may hinder interpretation",
+    x = "Tax Band",
+    y = "Weight (kg)"
+  ) +
+  theme_pubr() +  
+  theme(
+    legend.position = "none",
+    axis.title.x = element_text(margin = margin(t = 15)),
+    axis.title.y = element_text(margin = margin(r = 15)),
+    plot.subtitle = element_text(margin = margin(b = 15), color = "grey30", size = 10),
+    plot.title = element_text(size = 15, face = "bold")
+  ) 
+```
+
+
+
+
+
+```{r}
+pal <- c(Petrol = "#0072B2", Diesel = "#009E73", CNG = "#E69F00")
+corolla_subset |> 
+  ggplot(aes(weight, tax_band, fill = tax_band)) +
+  geom_boxplot() +
+  facet_grid(fuel_type ~ .) 
+```
+
+
+```{r}
+p <- ggboxplot(corolla_subset, x = "tax_band", y = "weight",
+                color = "tax_band", palette = pal,
+                add = "jitter", shape = "tax_band")
+p
+```
+
+
+
+```{r}
+corolla_subset |> 
+  ggplot(aes(km, price)) +
+  geom_point()
+```
+
+```{r}
+corolla_subset |> 
+  ggplot(aes(km, price, size = age_08_04, color = age_08_04)) +
+  geom_point(alpha = 0.5)
+```
+
+
+```{r}
+corolla_subset |> 
+  ggplot(aes(km, price, color = fuel_type)) +
+  geom_point(alpha = 0.5)
+```
+
+
+```{r}
+
+
+ggMarginal(p, type = "density", fill = "transparent")
+```
+
+
+
+```{r}
+corolla |> 
+  ggplot(aes(km, age_08_04)) + 
+  geom_density_2d(aes(color = after_stat(level)), size = 0.5) + 
+  geom_point(aes(color = price), alpha = 0.5)
+
+```
+
+
+
+```{r}
+corolla |>
+  ggplot(aes(hp, cc)) + 
+  geom_point()
+```
+
+
+
+
+```{r}
+
+
+corolla_subset <- corolla_subset |> 
+  mutate(group_var = paste(tax_band, weight_bin, sep = " - "))
+
+# Basic ridge plot
+ggplot(corolla_subset, aes(x = price, y = group_var)) +
+  geom_density_ridges(alpha = 0.7, scale = 0.9)
+
+```
+
+
+```{r}
+corolla_subset |> count(weight_bin)
+```
+
+```{r}
+corolla |> count(automatic)
+```
+
+```{r}
+group_cc_hp <- corolla |> 
+  filter(cc < 16000) |> 
+  group_by(cc, hp) |> 
+  summarise(
+    avg_weight = mean(weight, na.rm = TRUE),
+    median_price = median(price, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+
+ggplot(group_cc_hp, aes(x = cc, y = hp, size = avg_weight, color = median_price)) +
+  geom_point(alpha = 0.7) +
+  scale_size(range = c(2, 10), name = "Average Weight") +  # Adjust size range
+  scale_color_gradient(low = "blue", high = "red", name = "Median Price")
+```
+
+
+
+```{r}
+library(emojifont)
+```
+
+```{r}
+search_emoji("car")
+```
+
+```{r}
+ggplot() + geom_emoji("car", color='red') + theme_void()
+```
+
+```{r}
+set.seed(2016-03-09)
+fa <- fontawesome(c('fa-github', 'fa-weibo', 'fa-twitter', 'fa-android', 'fa-car-side'))
+d <- data.frame(x=rnorm(20),
+                y=rnorm(20),
+                label=sample(fa, 20, replace=T))
+
+ggplot(d, aes(x, y, color=label, label=label)) +
+    geom_text(family='fontawesome-webfont', size=15)+
+    xlab(NULL)+ylab(NULL) +
+    theme(legend.text=element_text(family='fontawesome-webfont'))
+```
+
+
+```{r}
+library(ggwaffle)
+waffle_data <- waffle_iron(mpg, aes_d(group = class))
+
+ggplot(waffle_data, aes(x, y, fill = group)) + 
+  geom_waffle()
+```
+
+
+
+
+
+
+
+
+
+```{r}
+library(dplyr)
+library(ggpubr)
+library(scales)
+library(forcats)
+
+fuel <- corolla |> 
+  count(fuel_type) |> 
+  mutate(pct = n / sum(n),
+         label = paste0(fuel_type, " — ", percent(pct, accuracy = 1))) |> 
+  arrange(desc(n)) %>%
+  mutate(fuel_type = fct_inorder(fuel_type))
+
+pal <- c(Petrol = "#0072B2", Diesel = "#009E73", CNG = "#E69F00")  # colorblind‑safe
+
+p <- ggdonutchart(
+  fuel, x = "n", label = "labs",
+  fill = "fuel_type", color = "white",
+  lab.pos = "out", lab.font = c(10, "bold", "black"), # outside labels for readability
+  size = 2, radius = 1, label.size = 0.3
+) +
+  scale_fill_manual(values = pal) +
+  labs(
+    title = "Fuel type share — Toyota (NL, 2004)",
+    subtitle = paste0("n = ", sum(fuel$n), " cars • showing percentages")
+  ) +
+  theme_void(base_size = 12) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold")
+  )
+
+p
+
+```
+
+
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(scales)
+
+fuel <- corolla %>%
+  count(fuel_type) %>%
+  mutate(pct = n/sum(n),
+         label = paste0(fuel_type, " — ", percent(pct, 0.1)))
+
+# Calculate cumulative positions for label placement
+fuel <- fuel %>%
+  arrange(desc(fuel_type)) %>%
+  mutate(ypos = cumsum(pct) - 0.5*pct)
+
+ggplot(fuel, aes(x = 2, y = pct, fill = fuel_type)) +
+  geom_bar(stat = "identity", color = "white", width = 1) +
+  coord_polar(theta = "y") +
+  xlim(0.5, 2.5) +  # adds space for outside labels
+  geom_text(aes(y = ypos, label = label), color = "black", size = 4, x = 2.7) +
+  scale_fill_manual(values = c("#0072B2", "#009E73", "#E69F00")) +
+  theme_void() +
+  theme(legend.position = "none") +
+  labs(title = "Fuel type share — Toyota (NL, 2004)",
+       subtitle = paste0("n = ", sum(fuel$n), " cars • showing percentages"))
+
+```
+
+
+
+
+
+
+```{r}
+# packages
+library(tidyverse)
+library(ggtext)     # for emoji rendering in ggplot text
+# Optional (if emoji don't render): showtext::showtext_auto(); sysfonts::font_add_google("Noto Color Emoji","noto")
+
+# counts you gave
+cnt <- c(Petrol = 1264, Diesel = 155, CNG = 17)
+p   <- round(100 * cnt / sum(cnt))          # -> 88, 11, 1 (sums to 100)
+
+# make 10x10 grid and assign fuel blocks
+waffle <- tibble(
+  fuel = rep(names(p), p),
+  i = 0:99,
+  x = i %% 10,
+  y = 9 - i %/% 10
+)
+
+ggplot(waffle, aes(x, y, color = fuel)) +
+  geom_text(label = "\U0001F697", size = 8) +  # 🚗
+  scale_color_manual(values = c(Petrol = "#4C9AFF", Diesel = "#36B37E", CNG = "#FF5630")) +
+  coord_equal(expand = FALSE) +
+  labs(title = "Fuel type share (Toyota, NL 2004)",
+       subtitle = sprintf("Petrol %d%%  •  Diesel %d%%  •  CNG %d%%", p["Petrol"], p["Diesel"], p["CNG"])) +
+  theme_void(base_size = 12) +
+  theme(legend.position = "none",
+        plot.title = element_text(face = "bold"))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
